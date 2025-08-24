@@ -1,43 +1,94 @@
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
+import wave
 from PIL import Image, ImageTk
 import pyodbc
 import pypyodbc
 import os
-import sounddevice as sd
+import pyaudio
 import numpy as np
 from faster_whisper import WhisperModel
-import scipy.io.wavfile
+import threading
 
 # Define the path to your Access DB
 db_path = os.path.abspath("contacts.mdb")
 conn_str = f'Driver={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path};'
+# Audio recording parameters
+duration = 5  # seconds
+fs = 44100    # sample rate
+buffer = 1024
+
+audio = pyaudio.PyAudio()
+stream = audio.open(format=pyaudio.paInt16, channels=1, rate=fs, input=True, start=False, frames_per_buffer=buffer)
+frames = []
 
 def record_and_transcribe_faster():
-    duration = 5  # seconds
-    fs = 16000    # sample rate
+    is_recording = True
 
-    try:
-        messagebox.showinfo("Recording", "Speak now...")
-        recording = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32')
-        sd.wait()
+    def record_loop():
+        nonlocal is_recording
+        try:
+            while is_recording:
+                data = stream.read(buffer)
+                frames.append(data)
+        except Exception as e:
+            print("Recording error:", e)
 
-        audio = np.squeeze(recording)
+    def stop_recording():
+        nonlocal is_recording
+        is_recording = False
+        stream.stop_stream()
+        stream.close()
+        sound_file = wave.open("temp_voice.wav", 'wb')
+        sound_file.setnchannels(1)
+        sound_file.setsampwidth(audio.get_sample_size(pyaudio.paInt16))
+        sound_file.setframerate(fs)
+        sound_file.writeframes(b''.join(frames))
+        sound_file.close()
+        recording_modal.destroy()
+        process_audio()
 
-        # Save to temporary WAV file (faster-whisper needs a file)
-        temp_path = "temp_voice.wav"
-        scipy.io.wavfile.write(temp_path, fs, audio)
+    def process_audio():
+        # Show processing modal
+        processing_modal = tk.Toplevel(root)
+        processing_modal.title("Processing")
+        processing_modal.geometry("300x100")
+        processing_modal.configure(bg="white")
+        processing_modal.grab_set()
 
-        # Load faster-whisper model
-        model = WhisperModel("base", device="cpu", compute_type="int8")  # Use "tiny" for faster results
+        label = tk.Label(processing_modal, text="Processing voice input...", bg="white", font=("Segoe UI", 12))
+        label.pack(pady=30)
+        root.update()
 
-        segments, _ = model.transcribe(temp_path, language="en")
+        try:
+            time.sleep(1)  # Simulate processing delay
+            # model = WhisperModel("base", device="cpu", compute_type="int8")
+            # segments, _ = model.transcribe("temp_voice.wav", language="en")
+            # text = " ".join([segment.text for segment in segments]).strip()
+            # parse_and_fill_fields(text)
+        except Exception as e:
+            messagebox.showerror("Voice Error", f"Failed to process voice:\n{e}")
+        finally:
+            processing_modal.destroy()
 
-        # Combine segments into full text
-        text = " ".join([segment.text for segment in segments]).strip()
-        parse_and_fill_fields(text)
-    except Exception as e:
-        messagebox.showerror("Voice Error", f"Failed to process voice:\n{e}")
+    # Show recording modal
+    recording_modal = tk.Toplevel(root)
+    recording_modal.title("Recording")
+    recording_modal.geometry("300x150")
+    recording_modal.configure(bg="white")
+    recording_modal.grab_set()
+
+    label = tk.Label(recording_modal, text="Recording now...\nPress OK to stop", bg="white", font=("Segoe UI", 12))
+    label.pack(pady=20)
+
+    ok_button = ttk.Button(recording_modal, text="OK", command=stop_recording)
+    ok_button.pack()
+
+    # Start recording in background thread
+    stream.start_stream()
+    frames.clear()
+    threading.Thread(target=record_loop, daemon=True).start()
 
 # Check if the file exists
 if not os.path.exists(db_path):
@@ -100,7 +151,7 @@ def on_focusout(entry, placeholder):
 # Create main window
 root = tk.Tk()
 root.title("HY Infotech GUI")
-root.geometry("500x350")
+root.geometry("640x480")
 root.configure(bg="white")
 
 # Load and display logo
@@ -168,5 +219,7 @@ def parse_and_fill_fields(text):
         entry2.insert(0, address)
         entry2.config(foreground='black')
 
-
 root.mainloop()
+stream.stop_stream()
+stream.close()
+audio.terminate()
