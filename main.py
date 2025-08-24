@@ -1,3 +1,4 @@
+import re
 import time
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -23,6 +24,9 @@ audio = pyaudio.PyAudio()
 stream = audio.open(format=pyaudio.paInt16, channels=1, rate=fs, input=True, start=False, frames_per_buffer=buffer)
 frames = []
 
+def clean_string(text):
+    return re.sub(r'[^A-Za-z\s]', '', text)
+
 def record_and_transcribe_faster():
     is_recording = True
 
@@ -39,7 +43,6 @@ def record_and_transcribe_faster():
         nonlocal is_recording
         is_recording = False
         stream.stop_stream()
-        stream.close()
         sound_file = wave.open("temp_voice.wav", 'wb')
         sound_file.setnchannels(1)
         sound_file.setsampwidth(audio.get_sample_size(pyaudio.paInt16))
@@ -52,37 +55,36 @@ def record_and_transcribe_faster():
     def process_audio():
         # Show processing modal
         processing_modal = tk.Toplevel(root)
-        processing_modal.title("Processing")
+        processing_modal.title("પ્રોસેસીંગ")
         processing_modal.geometry("300x100")
         processing_modal.configure(bg="white")
         processing_modal.grab_set()
 
-        label = tk.Label(processing_modal, text="Processing voice input...", bg="white", font=("Segoe UI", 12))
+        label = tk.Label(processing_modal, text="તમારા ભાષણ પર પ્રક્રિયા કરી રહ્યા છીએ...", bg="white", font=("Segoe UI", 12))
         label.pack(pady=30)
         root.update()
 
         try:
-            time.sleep(1)  # Simulate processing delay
-            # model = WhisperModel("base", device="cpu", compute_type="int8")
-            # segments, _ = model.transcribe("temp_voice.wav", language="en")
-            # text = " ".join([segment.text for segment in segments]).strip()
-            # parse_and_fill_fields(text)
+            model = WhisperModel("base", device="cpu", compute_type="int8", download_root="models")
+            segments, _ = model.transcribe("temp_voice.wav", language="gu", task="transcribe")
+            text = " ".join([segment.text for segment in segments]).strip()
+            parse_and_fill_fields(clean_string(text))
         except Exception as e:
-            messagebox.showerror("Voice Error", f"Failed to process voice:\n{e}")
+            messagebox.showerror("વૉઇસ ભૂલ", f"અવાજ પર પ્રક્રિયા કરવામાં નિષ્ફળ:\n{e}")
         finally:
             processing_modal.destroy()
 
     # Show recording modal
     recording_modal = tk.Toplevel(root)
-    recording_modal.title("Recording")
+    recording_modal.title("રેકોર્ડિંગ")
     recording_modal.geometry("300x150")
     recording_modal.configure(bg="white")
     recording_modal.grab_set()
 
-    label = tk.Label(recording_modal, text="Recording now...\nPress OK to stop", bg="white", font=("Segoe UI", 12))
+    label = tk.Label(recording_modal, text="રેકોર્ડિંગ હમણાં ચાલુ છે\nબંધ કરવા માટે ઓકે દબાવો", bg="white", font=("Segoe UI", 12))
     label.pack(pady=20)
 
-    ok_button = ttk.Button(recording_modal, text="OK", command=stop_recording)
+    ok_button = ttk.Button(recording_modal, text="ઓક", command=stop_recording)
     ok_button.pack()
 
     # Start recording in background thread
@@ -105,8 +107,8 @@ def save_data():
     val1 = entry1.get().strip()
     val2 = entry2.get().strip()
 
-    if val1 == "" or val1 == "Name" or val2 == "" or val2 == "Address":
-        messagebox.showwarning("Validation Error", "Both Name and Address are required.")
+    if val1 == "" or val1 == "નામ" or val2 == "" or val2 == "સરનામું":
+        messagebox.showwarning("માન્યતા ભૂલ", "નામ અને સરનામું બંને જરૂરી છે.")
     else:
         try:
             conn = pyodbc.connect(conn_str)
@@ -133,9 +135,16 @@ def save_data():
             conn.close()
 
             print(f"Saved: {val1}, {val2}")
-            messagebox.showinfo("Success", "Data saved successfully to database!")
+            messagebox.showinfo("સફળતા", "ડેટા સફળતાપૂર્વક સાચવ્યો!")
+            entry1.delete(0, "end")
+            entry1.insert(0, "નામ")
+            entry1.config(foreground='gray')
+
+            entry2.delete(0, "end")
+            entry2.insert(0, "સરનામું")
+            entry2.config(foreground='gray')
         except Exception as e:
-            messagebox.showerror("Database Error", f"Failed to save data:\n{e}")
+            messagebox.showerror("ડેટાબેઝ ભૂલ", f"ડેટા સાચવવામાં નિષ્ફળ થયાં:\n{e}")
 
 
 def on_entry_click(entry, placeholder):
@@ -150,7 +159,7 @@ def on_focusout(entry, placeholder):
 
 # Create main window
 root = tk.Tk()
-root.title("HY Infotech GUI")
+root.title("HY Infotech - Voice Input")
 root.geometry("640x480")
 root.configure(bg="white")
 
@@ -167,28 +176,28 @@ input_frame = tk.Frame(root, bg="white")
 input_frame.pack(pady=10)
 
 # Voice button
-voice_button = ttk.Button(input_frame, text="Voice", command=record_and_transcribe_faster)
+voice_button = ttk.Button(input_frame, text="બોલી", command=record_and_transcribe_faster)
 voice_button.grid(row=0, column=0, padx=5)
 voice_button.config(width=10)
 
 # Entry 1 with placeholder "Name"
 entry1 = ttk.Entry(input_frame, width=20, font=("Segoe UI", 12))
 entry1.grid(row=0, column=1, padx=5)
-entry1.insert(0, "Name")
+entry1.insert(0, "નામ")
 entry1.config(foreground='gray')
-entry1.bind("<FocusIn>", lambda e: on_entry_click(entry1, "Name"))
-entry1.bind("<FocusOut>", lambda e: on_focusout(entry1, "Name"))
+entry1.bind("<FocusIn>", lambda e: on_entry_click(entry1, "નામ"))
+entry1.bind("<FocusOut>", lambda e: on_focusout(entry1, "નામ"))
 
 # Entry 2 with placeholder "Address"
 entry2 = ttk.Entry(input_frame, width=20, font=("Segoe UI", 12))
 entry2.grid(row=0, column=2, padx=5)
-entry2.insert(0, "Address")
+entry2.insert(0, "સરનામું")
 entry2.config(foreground='gray')
-entry2.bind("<FocusIn>", lambda e: on_entry_click(entry2, "Address"))
-entry2.bind("<FocusOut>", lambda e: on_focusout(entry2, "Address"))
+entry2.bind("<FocusIn>", lambda e: on_entry_click(entry2, "સરનામું"))
+entry2.bind("<FocusOut>", lambda e: on_focusout(entry2, "સરનામું"))
 
 # Save button
-save_button = ttk.Button(input_frame, text="Save", command=save_data)
+save_button = ttk.Button(input_frame, text="સાચવો", command=save_data)
 save_button.grid(row=0, column=3, padx=5)
 save_button.config(width=10)
 
@@ -198,15 +207,15 @@ def parse_and_fill_fields(text):
     name = ""
     address = ""
 
-    if "name" in text and "address" in text:
+    if "નામ" in text and "સરનામું" in text:
         try:
-            name_start = text.index("name") + len("name")
-            address_start = text.index("address")
+            name_start = text.index("નામ") + len("નામ")
+            address_start = text.index("સરનામું")
 
             name = text[name_start:address_start].strip()
-            address = text[address_start + len("address"):].strip()
+            address = text[address_start + len("સરનામું"):].strip()
         except Exception as e:
-            messagebox.showerror("Parsing Error", f"Could not extract fields:\n{e}")
+            messagebox.showerror("પદચ્છેદન ભૂલ", f"ફીલ્ડ્સ કાઢી શકાયા નથી:\n{e}")
             return
 
     if name:
