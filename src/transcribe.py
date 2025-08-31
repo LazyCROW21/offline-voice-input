@@ -1,10 +1,12 @@
 import torch
 from transformers import pipeline
 
+# This script demonstrates how to use the "vasista22/whisper-gujarati-medium" model
+# for speech-to-text transcription in Gujarati using the Hugging Face Transformers library.
 def transcribe_gujarati_audio(audio_file_path):
     """
     Transcribes a Gujarati audio file using a pre-trained Whisper model,
-    prioritizing accuracy over speed.
+    prioritizing speed over accuracy.
 
     Args:
         audio_file_path (str): The path to the audio file to be transcribed.
@@ -16,16 +18,15 @@ def transcribe_gujarati_audio(audio_file_path):
         print(f"Using device: {device}")
 
         # Initialize the transcription pipeline with the specific model.
-        # We set generate_kwargs to enable beam search (num_beams > 1),
-        # which improves transcription accuracy by exploring more
-        # decoding possibilities, but is slower.
-        # By not specifying chunk_length_s, the pipeline defaults to
-        # processing the entire audio at once, which is best for accuracy.
+        # To improve speed, we are no longer using beam search (num_beams > 1),
+        # as it is a slower, but more accurate, decoding method. The pipeline
+        # now defaults to greedy search, which is much faster.
+        # For even more speed, consider using a smaller model like
+        # "vasista22/whisper-gujarati-small".
         transcriber = pipeline(
             task="automatic-speech-recognition",
-            model="vasista22/whisper-gujarati-medium",
-            device=device,
-            generate_kwargs={"num_beams": 5}
+            model="vasista22/whisper-gujarati-small",
+            device=device
         )
 
         # Transcribe the audio file. The pipeline handles all the
@@ -40,6 +41,7 @@ def transcribe_gujarati_audio(audio_file_path):
         print("\n--- Transcription Complete ---")
         print(f"Original Audio: {audio_file_path}")
         print(f"Transcribed Text: {transcribed_text}")
+        return transcribed_text
     
     except ImportError:
         print("Error: Required libraries not found.")
@@ -49,15 +51,13 @@ def transcribe_gujarati_audio(audio_file_path):
 
 # --- Example Usage ---
 if __name__ == "__main__":
-    # You can replace this with the path to your own Gujarati audio file.
-    # For this example, we'll use a public audio file from Hugging Face Datasets.
-    # The file contains a Gujarati phrase.
-    # Make sure your system can access this URL.
-    sample_audio_url = "C:\\Projects\\offline-voice-input\\temp_voice.wav"
+    # You can replace this with the path to your own local Gujarati audio file.
+    # The Hugging Face pipeline can handle various formats, but here we
+    # demonstrate with a .wav file.
+    sample_audio_path = "C:\\Projects\\offline-voice-input\\temp_voice.wav"
     
-    print("This script will download and transcribe a sample Gujarati audio file.")
-    print("If you have your own audio file, you can replace the 'sample_audio_url' variable.")
-    print(f"Sample audio URL: {sample_audio_url}")
+    print("This script is configured to transcribe a local .wav file.")
+    print("Please replace the 'sample_audio_path' variable with the path to your own file.")
     
-    # Run the transcription function with the sample audio.
-    transcribe_gujarati_audio(sample_audio_url)
+    # Run the transcription function with the sample audio path.
+    transcribe_gujarati_audio(sample_audio_path)

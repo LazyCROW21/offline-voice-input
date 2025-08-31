@@ -7,11 +7,12 @@ import pyodbc
 import pypyodbc
 import os
 import pyaudio
-from faster_whisper import WhisperModel
+from src.transcribe import transcribe_gujarati_audio
 import threading
 
 # Define the path to your Access DB
 db_path = os.path.abspath("contacts.mdb")
+audio_file_path = os.path.abspath("temp_voice.wav")
 conn_str = f"Driver={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path};"
 # Audio recording parameters
 duration = 5  # seconds
@@ -30,11 +31,7 @@ stream = audio.open(
 frames = []
 
 
-def clean_string(text):
-    return re.sub(r"[^A-Za-z\s]", "", text)
-
-
-def record_and_transcribe_faster():
+def record_and_transcribe(field_type):
     is_recording = True
 
     def record_loop():
@@ -50,16 +47,16 @@ def record_and_transcribe_faster():
         nonlocal is_recording
         is_recording = False
         stream.stop_stream()
-        sound_file = wave.open("temp_voice.wav", "wb")
+        sound_file = wave.open(audio_file_path, "wb")
         sound_file.setnchannels(1)
         sound_file.setsampwidth(audio.get_sample_size(pyaudio.paInt16))
         sound_file.setframerate(fs)
         sound_file.writeframes(b"".join(frames))
         sound_file.close()
         recording_modal.destroy()
-        process_audio()
+        process_audio(field_type)
 
-    def process_audio():
+    def process_audio(field_type):
         # Show processing modal
         processing_modal = tk.Toplevel(root)
         processing_modal.title("પ્રોસેસીંગ")
@@ -77,14 +74,14 @@ def record_and_transcribe_faster():
         root.update()
 
         try:
-            model = WhisperModel(
-                "vasista22/whisper-gujarati-medium", device="cpu", compute_type="int8", download_root="models"
-            )
-            segments, _ = model.transcribe(
-                "temp_voice.wav", language="gu", task="transcribe"
-            )
-            text = " ".join([segment.text for segment in segments]).strip()
-            parse_and_fill_fields(clean_string(text))
+            text = transcribe_gujarati_audio(audio_file_path)
+            if text:
+                parse_and_fill_fields(text, field_type)
+            else:
+                # Handle cases where transcription failed internally
+                messagebox.showerror(
+                    "વૉઇસ ભૂલ", "અવાજ પર પ્રક્રિયા કરવામાં નિષ્ફળ: ટ્રાન્સક્રિપ્શન અસફળ"
+                )
         except Exception as e:
             messagebox.showerror("વૉઇસ ભૂલ", f"અવાજ પર પ્રક્રિયા કરવામાં નિષ્ફળ:\n{e}")
         finally:
@@ -204,12 +201,12 @@ logo_label.pack(pady=20)
 input_frame = tk.Frame(root, bg="white")
 input_frame.pack(pady=10)
 
-# Voice button
-voice_button = ttk.Button(
-    input_frame, text="બોલી", command=record_and_transcribe_faster
+# Voice button for Name
+voice_button_name = ttk.Button(
+    input_frame, text="નામ બોલો", command=lambda: record_and_transcribe("name")
 )
-voice_button.grid(row=0, column=0, padx=5)
-voice_button.config(width=10)
+voice_button_name.grid(row=0, column=0, padx=5)
+voice_button_name.config(width=10)
 
 # Entry 1 with placeholder "Name"
 entry1 = ttk.Entry(input_frame, width=20, font=("Segoe UI", 12))
@@ -219,9 +216,16 @@ entry1.config(foreground="gray")
 entry1.bind("<FocusIn>", lambda e: on_entry_click(entry1, "નામ"))
 entry1.bind("<FocusOut>", lambda e: on_focusout(entry1, "નામ"))
 
+# Voice button for Address
+voice_button_address = ttk.Button(
+    input_frame, text="સરનામું બોલો", command=lambda: record_and_transcribe("address")
+)
+voice_button_address.grid(row=1, column=0, padx=5, pady=5)
+voice_button_address.config(width=10)
+
 # Entry 2 with placeholder "Address"
 entry2 = ttk.Entry(input_frame, width=20, font=("Segoe UI", 12))
-entry2.grid(row=0, column=2, padx=5)
+entry2.grid(row=1, column=1, padx=5, pady=5)
 entry2.insert(0, "સરનામું")
 entry2.config(foreground="gray")
 entry2.bind("<FocusIn>", lambda e: on_entry_click(entry2, "સરનામું"))
@@ -229,35 +233,21 @@ entry2.bind("<FocusOut>", lambda e: on_focusout(entry2, "સરનામું")
 
 # Save button
 save_button = ttk.Button(input_frame, text="સાચવો", command=save_data)
-save_button.grid(row=0, column=3, padx=5)
+save_button.grid(row=2, column=1, padx=5, pady=10)
 save_button.config(width=10)
 
 
-def parse_and_fill_fields(text):
+def parse_and_fill_fields(text, field_type):
     print("translation:", text)
-    text = text.lower()
-    name = ""
-    address = ""
+    text = text.lower().strip()
 
-    if "નામ" in text and "સરનામું" in text:
-        try:
-            name_start = text.index("નામ") + len("નામ")
-            address_start = text.index("સરનામું")
-
-            name = text[name_start:address_start].strip()
-            address = text[address_start + len("સરનામું") :].strip()
-        except Exception as e:
-            messagebox.showerror("પદચ્છેદન ભૂલ", f"ફીલ્ડ્સ કાઢી શકાયા નથી:\n{e}")
-            return
-
-    if name:
+    if field_type == "name":
         entry1.delete(0, "end")
-        entry1.insert(0, name)
+        entry1.insert(0, text)
         entry1.config(foreground="black")
-
-    if address:
+    elif field_type == "address":
         entry2.delete(0, "end")
-        entry2.insert(0, address)
+        entry2.insert(0, text)
         entry2.config(foreground="black")
 
 
