@@ -1,37 +1,54 @@
 import torch
-from transformers import pipeline
+from transformers import pipeline, AutoModelForSpeechSeq2Seq, AutoProcessor
 
-# This script demonstrates how to use the "vasista22/whisper-gujarati-medium" model
+# This script demonstrates how to use the "vasista22/whisper-gujarati-small" model
 # for speech-to-text transcription in Gujarati using the Hugging Face Transformers library.
+# The model has been optimized for CPU-only performance.
 def transcribe_gujarati_audio(audio_file_path):
     """
     Transcribes a Gujarati audio file using a pre-trained Whisper model,
-    prioritizing speed over accuracy.
+    prioritizing speed over accuracy, and running exclusively on the CPU.
 
     Args:
         audio_file_path (str): The path to the audio file to be transcribed.
                                This can be a local file path or a URL.
     """
     try:
-        # Determine the device to use (GPU if available, otherwise CPU).
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # The device is hardcoded to CPU for this optimized version.
+        device = "cpu"
         print(f"Using device: {device}")
 
-        # Initialize the transcription pipeline with the specific model.
-        # To improve speed, we are no longer using beam search (num_beams > 1),
-        # as it is a slower, but more accurate, decoding method. The pipeline
-        # now defaults to greedy search, which is much faster.
-        # For even more speed, consider using a smaller model like
-        # "vasista22/whisper-gujarati-small".
+        # To improve speed, we are using a smaller model and enabling optimizations
+        # specific to CPU architecture.
+        model_name = "vasista22/whisper-gujarati-small"
+        
+        # The 'has_bf16_support' check can cause errors on older PyTorch versions.
+        # We will default to float32 to ensure compatibility across all CPUs.
+        # This will still work, just without bfloat16 optimization.
+        model_dtype = torch.float32
+        print("Using float32 data type for compatibility.")
+
+        # Load the model with CPU-specific optimizations
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_name,
+            torch_dtype=model_dtype,
+            low_cpu_mem_usage=True
+        )
+        
+        # Load the processor
+        processor = AutoProcessor.from_pretrained(model_name)
+
+        # Initialize the transcription pipeline with the specific model and processor.
+        # The pipeline now uses the optimized model and processor.
+        # It defaults to greedy search (num_beams=1), which is much faster than beam search.
         transcriber = pipeline(
             task="automatic-speech-recognition",
-            model="vasista22/whisper-gujarati-small",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
             device=device
         )
 
-        # Transcribe the audio file. The pipeline handles all the
-        # necessary steps: loading the audio, pre-processing, and running
-        # the model.
         print("Transcribing audio... Please wait.")
         transcription_result = transcriber(audio_file_path)
 
@@ -43,21 +60,10 @@ def transcribe_gujarati_audio(audio_file_path):
         print(f"Transcribed Text: {transcribed_text}")
         return transcribed_text
     
-    except ImportError:
+    except ImportError as e:
         print("Error: Required libraries not found.")
-        print("Please install them using: pip install transformers[torch] accelerate")
+        print(f"Please install them using: pip install transformers[torch] accelerate")
+        raise e
     except Exception as e:
         print(f"An error occurred during transcription: {e}")
-
-# --- Example Usage ---
-if __name__ == "__main__":
-    # You can replace this with the path to your own local Gujarati audio file.
-    # The Hugging Face pipeline can handle various formats, but here we
-    # demonstrate with a .wav file.
-    sample_audio_path = "C:\\Projects\\offline-voice-input\\temp_voice.wav"
-    
-    print("This script is configured to transcribe a local .wav file.")
-    print("Please replace the 'sample_audio_path' variable with the path to your own file.")
-    
-    # Run the transcription function with the sample audio path.
-    transcribe_gujarati_audio(sample_audio_path)
+        return ""

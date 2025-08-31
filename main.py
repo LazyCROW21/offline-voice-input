@@ -14,27 +14,30 @@ import threading
 db_path = os.path.abspath("contacts.mdb")
 audio_file_path = os.path.abspath("temp_voice.wav")
 conn_str = f"Driver={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path};"
-# Audio recording parameters
-duration = 5  # seconds
-fs = 44100  # sample rate
-buffer = 1024
-
-audio = pyaudio.PyAudio()
-stream = audio.open(
-    format=pyaudio.paInt16,
-    channels=1,
-    rate=fs,
-    input=True,
-    start=False,
-    frames_per_buffer=buffer,
-)
-frames = []
 
 
 def record_and_transcribe(field_type):
+    fs = 44100  # sample rate
+    buffer = 1024
+    """
+    Handles the recording process, displaying a modal window, and
+    calling the transcription function after the recording is stopped.
+    """
+    # Create a new PyAudio instance and stream for this recording session
+    audio = pyaudio.PyAudio()
+    stream = audio.open(
+        format=pyaudio.paInt16,
+        channels=1,
+        rate=fs,
+        input=True,
+        frames_per_buffer=buffer,
+    )
+    frames = []
+
     is_recording = True
 
     def record_loop():
+        """Captures audio data from the stream and appends it to frames."""
         nonlocal is_recording
         try:
             while is_recording:
@@ -44,20 +47,31 @@ def record_and_transcribe(field_type):
             print("Recording error:", e)
 
     def stop_recording():
+        """Stops the recording, saves the audio to a file, and starts processing."""
         nonlocal is_recording
         is_recording = False
+
+        # Stop and terminate the stream properly
         stream.stop_stream()
-        sound_file = wave.open(audio_file_path, "wb")
-        sound_file.setnchannels(1)
-        sound_file.setsampwidth(audio.get_sample_size(pyaudio.paInt16))
-        sound_file.setframerate(fs)
-        sound_file.writeframes(b"".join(frames))
-        sound_file.close()
-        recording_modal.destroy()
-        process_audio(field_type)
+        stream.close()
+        audio.terminate()
+
+        # Save the recorded audio to a WAV file
+        try:
+            sound_file = wave.open(audio_file_path, "wb")
+            sound_file.setnchannels(1)
+            sound_file.setsampwidth(pyaudio.PyAudio().get_sample_size(pyaudio.paInt16))
+            sound_file.setframerate(fs)
+            sound_file.writeframes(b"".join(frames))
+            sound_file.close()
+
+            recording_modal.destroy()
+            process_audio(field_type)
+        except Exception as e:
+            messagebox.showerror("વૉઇસ ભૂલ", f"ઑડિયો ફાઇલ સાચવવામાં નિષ્ફળ: {e}")
 
     def process_audio(field_type):
-        # Show processing modal
+        """Shows a processing modal and calls the transcription function."""
         processing_modal = tk.Toplevel(root)
         processing_modal.title("પ્રોસેસીંગ")
         processing_modal.geometry("300x100")
@@ -74,11 +88,11 @@ def record_and_transcribe(field_type):
         root.update()
 
         try:
+            # Assuming transcribe_gujarati_audio and parse_and_fill_fields are defined elsewhere
             text = transcribe_gujarati_audio(audio_file_path)
             if text:
                 parse_and_fill_fields(text, field_type)
             else:
-                # Handle cases where transcription failed internally
                 messagebox.showerror(
                     "વૉઇસ ભૂલ", "અવાજ પર પ્રક્રિયા કરવામાં નિષ્ફળ: ટ્રાન્સક્રિપ્શન અસફળ"
                 )
@@ -107,7 +121,6 @@ def record_and_transcribe(field_type):
 
     # Start recording in background thread
     stream.start_stream()
-    frames.clear()
     threading.Thread(target=record_loop, daemon=True).start()
 
 
