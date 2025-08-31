@@ -181,4 +181,5 @@ cython_debug/
 .cursorindexingignore
 
 *.mdb
+/models
 temp_voice.wav
